@@ -14,120 +14,227 @@ import Foundation
 import SwiftUI
 
 
-struct ContentView: View {
-    @StateObject private var viewModel = PokemonViewModel()
-    
-    var body: some View {
-        TabView {
-            ZStack {
-                VStack {
-                    Text("POKEMONS")
-                        .foregroundColor(.gray)
-                        .fontWeight(.bold)
-                        .font(.title2)
+// SwiftUI Pokémon App com estatísticas e captura
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            ForEach(viewModel.pokemons, id: \.name) { pokemon in
-                                VStack {
-                                    AsyncImage(url: URL(string: pokemon.imageUrl)) { image in
-                                        image.resizable()
-                                    } placeholder: {
-                                        ProgressView()
-                                    }
-                                    .frame(width: 80, height: 80)
-                                    .background(Color.gray.opacity(0.2))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    
-                                    Text(pokemon.name.capitalized)
-                                        .font(.caption)
-                                }
-                            }
-                        }
-                        .padding()
-                    }
-                }
-            }
-            .tabItem { Label("Menu", systemImage: "house") }.tag(1)
-            
-            Text("Tab Content 2")
-                .tabItem { Label("Estatísticas", systemImage: "chart.line.uptrend.xyaxis") }.tag(2)
-            
-            Text("Tab Content 3")
-                .tabItem { Label("Pesquisar", systemImage: "magnifyingglass.circle.fill") }.tag(3)
-        }
-        .onAppear {
-            viewModel.fetchPokemons()
-        }
-    }
-}
+import SwiftUI
 
-
-import Foundation
-
-struct Pokemon: Codable {
+## Models
+struct Pokemon: Identifiable, Codable, Hashable {
+    let id = UUID()
     let name: String
     let url: String
-    
-    var id: Int {
-        // Pega o ID do final da URL (ex: "https://pokeapi.co/api/v2/pokemon/1/")
-        Int(url.split(separator: "/").last ?? "0") ?? 0
-    }
-    
     var imageUrl: String {
-        "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/\(id).png"
+        let index = url.split(separator: "/").dropLast().last ?? "1"
+        return "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/\(index).png"
+    }
+    var number: Int {
+        return Int(url.split(separator: "/").dropLast().last ?? "1") ?? 1
     }
 }
 
+struct PokemonDetail: Codable {
+    let types: [TypeSlot]
+    let stats: [Stat]
+}
 
-import Foundation
-import Combine
+struct TypeSlot: Codable {
+    let type: NamedAPIResource
+}
 
+struct Stat: Codable {
+    let base_stat: Int
+    let stat: NamedAPIResource
+}
+
+struct NamedAPIResource: Codable {
+    let name: String
+}
+
+## ViewModel
 class PokemonViewModel: ObservableObject {
-    @Published var pokemons: [Pokemon] = []
+    @Published var allPokemon: [Pokemon] = []
+    @Published var capturedPokemon: [Pokemon] = []
+    @Published var capturedDetails: [Pokemon: PokemonDetail] = [:]
 
-    func fetchPokemons() {
-        guard let url = URL(string: "https://pokeapi.co/api/v2/pokemon?limit=10") else { return }
+    init() {
+        fetchPokemon()
+    }
 
-        URLSession.shared.dataTask(with: url) { data, _, error in
-            guard let data = data, error == nil else { return }
+    func fetchPokemon() {
+        guard let url = URL(string: "https://pokeapi.co/api/v2/pokemon?limit=151") else { return }
 
-            do {
-                let decodedResponse = try JSONDecoder().decode(PokemonResponse.self, from: data)
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data else { return }
+            if let decoded = try? JSONDecoder().decode(PokemonListResponse.self, from: data) {
                 DispatchQueue.main.async {
-                    self.pokemons = decodedResponse.results
+                    self.allPokemon = decoded.results
                 }
-            } catch {
-                print("Erro ao decodificar:", error)
             }
         }.resume()
     }
+
+    func fetchDetail(for pokemon: Pokemon, completion: @escaping (PokemonDetail) -> Void) {
+        guard let url = URL(string: pokemon.url) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data else { return }
+            if let detail = try? JSONDecoder().decode(PokemonDetail.self, from: data) {
+                DispatchQueue.main.async {
+                    self.capturedDetails[pokemon] = detail
+                    completion(detail)
+                }
+            }
+        }.resume()
+    }
+
+    func toggleCapture(_ pokemon: Pokemon) {
+        if capturedPokemon.contains(pokemon) {
+            capturedPokemon.removeAll { $0 == pokemon }
+            capturedDetails.removeValue(forKey: pokemon)
+        } else {
+            capturedPokemon.append(pokemon)
+            fetchDetail(for: pokemon) { _ in }
+        }
+    }
+
+    func totalByType() -> [String: Int] {
+        var count: [String: Int] = [:]
+        for detail in capturedDetails.values {
+            for type in detail.types {
+                count[type.type.name, default: 0] += 1
+            }
+        }
+        return count
+    }
+
+    func strongestPokemon() -> (Pokemon, Int)? {
+        return capturedDetails.max { a, b in
+            totalStats(for: a.value) < totalStats(for: b.value)
+        }.map { ($0.key, totalStats(for: $0.value)) }
+    }
+
+    func weakestPokemon() -> (Pokemon, Int)? {
+        return capturedDetails.min { a, b in
+            totalStats(for: a.value) < totalStats(for: b.value)
+        }.map { ($0.key, totalStats(for: $0.value)) }
+    }
+
+    private func totalStats(for detail: PokemonDetail) -> Int {
+        detail.stats.map { $0.base_stat }.reduce(0, +)
+    }
 }
 
-struct PokemonResponse: Codable {
+struct PokemonListResponse: Codable {
     let results: [Pokemon]
 }
 
+## Views
+struct ContentView: View {
+    @StateObject private var viewModel = PokemonViewModel()
+    @State private var selection = 0
 
+    var body: some View {
+        TabView(selection: $selection) {
+            PokemonListView(viewModel: viewModel, selection: $selection)
+                .tabItem { Label("Pokémons", systemImage: "list.bullet") }
+                .tag(0)
 
-## FUNCIONAMENTO DO FLUXO:
+            StatisticsView(viewModel: viewModel, selection: $selection)
+                .tabItem { Label("Estatísticas", systemImage: "chart.bar") }
+                .tag(1)
+        }
+    }
+}
 
-O ContentView aparece.
+struct PokemonListView: View {
+    @ObservedObject var viewModel: PokemonViewModel
+    @Binding var selection: Int
 
-Chama viewModel.fetchPokemons().
+    var body: some View {
+        NavigationView {
+            VStack {
+                HStack {
+                    Spacer()
+                    Button("Ver Estatísticas") {
+                        selection = 1
+                    }.padding()
+                }
+                Text("POKEMONS")
+                    .font(.largeTitle)
+                    .bold()
+                ScrollView {
+                    LazyVStack {
+                        ForEach(viewModel.allPokemon) { pokemon in
+                            HStack {
+                                AsyncImage(url: URL(string: pokemon.imageUrl)) { image in
+                                    image.resizable().scaledToFit().frame(width: 50, height: 50)
+                                } placeholder: {
+                                    ProgressView()
+                                }
+                                Text(pokemon.name.capitalized)
+                                    .font(.title3)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(viewModel.capturedPokemon.contains(pokemon) ? Color.green.opacity(0.3) : Color.clear)
+                            .cornerRadius(10)
+                            .onTapGesture {
+                                viewModel.toggleCapture(pokemon)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationBarHidden(true)
+        }
+    }
+}
 
-A função busca a lista na PokéAPI.
+struct StatisticsView: View {
+    @ObservedObject var viewModel: PokemonViewModel
+    @Binding var selection: Int
 
-A API retorna um JSON com nomes e URLs.
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer()
+                    Button("Voltar") {
+                        selection = 0
+                    }.padding()
+                }
+                Text("Estatísticas")
+                    .font(.largeTitle)
+                    .bold()
+                Text("Total capturados: \(viewModel.capturedPokemon.count)")
+                Text("Faltam: \(151 - viewModel.capturedPokemon.count)")
+                ForEach(Array(viewModel.totalByType().sorted { $0.key < $1.key }), id: \.(key)) { type, count in
+                    Text("\(type.capitalized): \(count)")
+                }
+                if let strongest = viewModel.strongestPokemon() {
+                    Text("Mais forte: \(strongest.0.name.capitalized) com \(strongest.1) pontos")
+                }
+                if let weakest = viewModel.weakestPokemon() {
+                    Text("Mais fraco: \(weakest.0.name.capitalized) com \(weakest.1) pontos")
+                }
+                Spacer()
+            }
+            .padding()
+            .navigationBarHidden(true)
+        }
+    }
+}
 
-A ViewModel cria objetos Pokemon.
+## Preview
+@main
+struct PokemonApp: App {
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
 
-A interface mostra a imagem e nome de cada um.
-
- 
-## Organização de Arquivos:
-
-Pokemon.swift: struct do modelo.
 
 PokemonViewModel.swift: lógica da API.
 
