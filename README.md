@@ -19,10 +19,14 @@ Este projeto foi desenvolvido como parte do curso TIC Trilhas Mackenzie. Ele uti
 
 
 - Tela de lista de Pokémons
-- ![Descrição da imagem](Downloads/imagens/telaPrincipalSwift)
+- ![Tela Principal](Downloads/telasSwift/telaPrincipalSwift.jpeg)
+
 
 - Tela de estatísticas
+- ![Tela Estasttisticas](Downloads/telasSwift/telaSecundariaEstatisticas.jpeg)
+    
 - Detalhes de um Pokémon capturado
+- ![Tela Tipos](Downloads/telasSwift/telaTipos.jpeg)
 
 ---
 
@@ -55,7 +59,7 @@ Define a navegação por abas entre:
 
 ---
 
-## 🧪 Funcionalidades
+##  Funcionalidades
 
 | Funcionalidade              | Descrição                                                                 |
 |----------------------------|---------------------------------------------------------------------------|
@@ -67,7 +71,7 @@ Define a navegação por abas entre:
 
 ---
 
-## 🚀 Como Rodar o Projeto
+##  Como Rodar o Projeto
 
 1. Clone o repositório:
    ```bash
@@ -75,6 +79,6 @@ Define a navegação por abas entre:
 2. Abra o projeto no XCode.
 3. Execute em um simulador ou dispositivo físico
 
-##Ideias para melhorias
+## Ideias para melhorias
 - Adicionar busca por nome
 - Filtrar por tipo de pokemon
