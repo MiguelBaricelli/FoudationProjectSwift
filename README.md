@@ -19,7 +19,7 @@ Este projeto foi desenvolvido como parte do curso TIC Trilhas Mackenzie. Ele uti
 
 
 - Tela de lista de Pokémons
-- ![Descrição da imagem](https://url-da-imagem.com/imagem.png)
+- ![Descrição da imagem](Downloads/imagens/telaPrincipalSwift)
 
 - Tela de estatísticas
 - Detalhes de um Pokémon capturado
